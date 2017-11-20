@@ -1,89 +1,91 @@
 package audio
 
-import(
-  "fmt"
-  "strings"
-  "time"
-  "github.com/gordonklaus/portaudio"
+import (
+	"fmt"
+	"github.com/gordonklaus/portaudio"
+	"strings"
 )
 
-const (
-  ChunkSize = 1024
-  DeviceName = "USB Audio Device"
-)
+type AudioInput struct {
+	ChunkSize  int
+	DeviceName string
+	SampleRate float64
 
-func streamCallback(in []int16) {
-  fmt.Printf("Callback buffer: %v samples %v\n", len(in), in[:10])
+	stream *portaudio.Stream
+	audioc chan []int16
 }
 
-func Test() error {
-  fmt.Println("This is audio test.")
+func NewAudioInput() *AudioInput {
+	return &AudioInput{
+		ChunkSize:  1024,
+		DeviceName: "USB Audio Device",
+		SampleRate: 48000,
+	}
+}
 
-  err := portaudio.Initialize()
-  if err != nil {
-    return err
-  }
+func (ai *AudioInput) Open() (<-chan []int16, error) {
+	err := portaudio.Initialize()
+	if err != nil {
+		return nil, err
+	}
 
-  defer func() {
-    err := portaudio.Terminate()
-    if err != nil {
-      fmt.Printf("Terminate failed: %v\n", err)
-    }
-    fmt.Println("Portaudio terminated")
-  }()
+	fmt.Println("AudioInput initialized: ", portaudio.VersionText())
 
-  fmt.Println("Portaudio initialized: ", portaudio.VersionText())
+	devices, err := portaudio.Devices()
+	if err != nil {
+		return nil, err
+	}
+	var device *portaudio.DeviceInfo
+	for _, d := range devices {
+		if strings.Contains(d.Name, ai.DeviceName) {
+			device = d
+		}
+	}
+	if device == nil {
+		return nil, fmt.Errorf("Target not found in list of devices")
+	}
 
-  devices, err := portaudio.Devices()
-  if err != nil {
-    return err
-  }
-  var device *portaudio.DeviceInfo
-  for _, d := range devices {
-    if strings.Contains(d.Name, DeviceName) {
-      device = d
-    }
-  }
-  if device == nil {
-    return fmt.Errorf("Target not found in list of devices")
-  }
+	fmt.Printf("Device found! %+v\n", device)
 
-  fmt.Printf("Device found! %+v\n", device)
+	params := portaudio.StreamParameters{
+		Input: portaudio.StreamDeviceParameters{
+			Device:   device,
+			Channels: 1,
+			Latency:  device.DefaultLowInputLatency,
+		},
+		SampleRate:      ai.SampleRate,
+		FramesPerBuffer: ai.ChunkSize,
+	}
 
-  params := portaudio.StreamParameters{
-    Input: portaudio.StreamDeviceParameters{
-      Device: device,
-      Channels: 1,
-      Latency: device.DefaultLowInputLatency,
-    },
-    SampleRate: 48000,
-    FramesPerBuffer: ChunkSize,
-  }
+	ai.audioc = make(chan []int16)
 
-  stream, err := portaudio.OpenStream(params, streamCallback)
-  if err != nil {
-    fmt.Printf("Open stream error: %v\n", err)
-    return err
-  }
+	callback := func(in []int16) {
+		ai.audioc <- in
+	}
 
-  err = stream.Start()
-  if err != nil {
-    fmt.Printf("Start stream error: %v\n", err)
-    return nil
-  }
+	stream, err := portaudio.OpenStream(params, callback)
+	if err != nil {
+		return nil, err
+	}
 
-  defer func() {
-    err := stream.Close()
-    if err != nil {
-      fmt.Printf("Error while closing stream: %v\n", err)
-    }
-  }()
+	err = stream.Start()
+	if err != nil {
+		return nil, err
+	}
 
+	ai.stream = stream
+	return ai.audioc, nil
+}
 
+func (ai *AudioInput) Close() {
+	err := ai.stream.Close()
+	if err != nil {
+		fmt.Printf("Error while closing stream: %v\n", err)
+	}
 
-  time.Sleep(time.Second * 2)
-
-
-
-  return nil
+	err = portaudio.Terminate()
+	if err != nil {
+		fmt.Printf("Terminate failed: %v\n", err)
+	}
+	fmt.Println("Portaudio terminated")
 }
