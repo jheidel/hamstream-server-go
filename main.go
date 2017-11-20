@@ -7,6 +7,7 @@ import (
   "syscall"
 
   "hamstream/flasher"
+  "hamstream/audio"
 )
 
 func main() {
@@ -18,6 +19,11 @@ func main() {
   // Signal liveness by flashing an LED.
   flasher.Start()
   defer flasher.Stop()
+
+  err := audio.Test()
+  if err != nil {
+    fmt.Printf("Audio exited with error %v\n", err)
+  }
 
   // Wait for signal to stop program.
   s := <-sig
