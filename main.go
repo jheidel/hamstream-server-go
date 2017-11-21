@@ -27,6 +27,13 @@ func main() {
 	}
 	defer ai.Close()
 
+
+  filter := audio.NewSilenceFilter()
+
+  audioc = filter.Apply(audioc)
+
+
+
 	for {
 		select {
 		case a := <-audioc:

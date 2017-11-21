@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"sync"
 	"time"
 )
 
@@ -12,12 +13,16 @@ type SilenceFilter struct {
 	DurationThresh time.Duration
 
 	lastSound time.Time
+	level     int16
+	silent    bool
+	mutex     sync.Mutex
 }
 
 func NewSilenceFilter() *SilenceFilter {
 	return &SilenceFilter{
 		LevelThresh:    50,
 		DurationThresh: 5 * time.Second,
+		silent:         true,
 	}
 }
 
@@ -38,17 +43,35 @@ func getLevel(samples []int16) int16 {
 func (sf *SilenceFilter) Apply(in <-chan []int16) <-chan []int16 {
 	c := make(chan []int16)
 	go func() {
-    defer close(c)
+		defer close(c)
 		for samples := range in {
 			level := getLevel(samples)
 			now := time.Now()
 			if level > sf.LevelThresh {
 				sf.lastSound = now
 			}
+			silent := true
 			if now.Sub(sf.lastSound) < sf.DurationThresh {
 				c <- samples
+				silent = false
 			}
+			sf.mutex.Lock()
+			sf.level = level
+			sf.silent = silent
+			sf.mutex.Unlock()
 		}
 	}()
 	return c
+}
+
+func (sf *SilenceFilter) GetLevel() int16 {
+	sf.mutex.Lock()
+	defer sf.mutex.Unlock()
+	return sf.level
+}
+
+func (sf *SilenceFilter) IsSilent() bool {
+	sf.mutex.Lock()
+	defer sf.mutex.Unlock()
+	return sf.silent
 }
