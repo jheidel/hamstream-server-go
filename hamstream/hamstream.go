@@ -1,6 +1,8 @@
 package hamstream
 
 import(
+  "io"
+  "fmt"
   "net/http"
 	"hamstream/audio"
 )
@@ -38,11 +40,16 @@ func (h *Hamstream) loop() error {
     bcast.Consume(audioc)
 
     http.HandleFunc("/audio", aserver.ServeAudio)
+    http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+      io.WriteString(w, "OK\n")
+    })
 
     errc := make(chan error)
     go func() {
       defer close(errc)
+      fmt.Println("HTTP server listening on", h.Address)
       if err := http.ListenAndServe(h.Address, nil); err != nil {
+        fmt.Println("Http serve error", err)
         errc <- err
       }
     }()
@@ -51,6 +58,7 @@ func (h *Hamstream) loop() error {
       case err := <-errc:
         return err
       case <-h.quit:
+        // TODO quit the server.
         return nil
     }
 }

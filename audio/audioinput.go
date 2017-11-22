@@ -17,7 +17,7 @@ type AudioInput struct {
 
 func NewAudioInput() *AudioInput {
 	return &AudioInput{
-		ChunkSize:  1024,
+		ChunkSize:  2048,
 		DeviceName: "USB Audio Device",
 		SampleRate: 48000,
 	}
@@ -57,13 +57,17 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		FramesPerBuffer: ai.ChunkSize,
 	}
 
+  buf := make([]int16, ai.ChunkSize)
+
 	ai.audioc = make(chan AudioData)
 
-	callback := func(in []int16) {
-		ai.audioc <- AudioData(in)
-	}
+	//callback := func(in []int16) {
+	//	ai.audioc <- AudioData(in)
+	//}
 
-	stream, err := portaudio.OpenStream(params, callback)
+	//stream, err := portaudio.OpenStream(params, callback)
+
+	stream, err := portaudio.OpenStream(params, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +76,20 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 	if err != nil {
 		return nil, err
 	}
+
+  go func() {
+    for {
+      n := make([]int16, ai.ChunkSize)
+      if err := stream.Read(); err != nil {
+        fmt.Println("Read error!", err)
+        // TODO
+        continue
+      }
+      copy(n, buf)
+      ai.audioc <- n
+    }
+    // TODO handle close; stop reading.
+  }()
 
 	ai.stream = stream
 	return ai.audioc, nil

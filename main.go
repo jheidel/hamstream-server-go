@@ -20,7 +20,7 @@ func main() {
 	flasher.Start()
 	defer flasher.Stop()
 
-	h := hamstream.NewServer("localhost:8080")
+	h := hamstream.NewServer(":8080")
 	servec := h.Serve()
 
 	for {

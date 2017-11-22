@@ -17,6 +17,8 @@ type AudioServer struct {
 }
 
 func (a *AudioServer) ServeAudio(w http.ResponseWriter, r *http.Request) {
+  fmt.Printf("Client connected with header\n%+v\n", r.Header)
+
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Println("error upgrading websocket: ", err)
@@ -32,6 +34,7 @@ func (a *AudioServer) ServeAudio(w http.ResponseWriter, r *http.Request) {
 	for data := range ar.GetAudioStream() {
 		// TODO move this encoding nonsense before the broadcast.
 		samples := []int16(data)
+
 		buf := new(bytes.Buffer)
 		buf.Grow(len(samples) * 2)
 
@@ -43,9 +46,9 @@ func (a *AudioServer) ServeAudio(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// TODO set timeout for send.
+    bs := buf.Bytes()
 
-		if err := c.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
+		if err := c.WriteMessage(websocket.BinaryMessage, bs); err != nil {
 			fmt.Println("Audio websocket write failure: ", err)
 			return
 		}

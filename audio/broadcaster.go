@@ -64,9 +64,11 @@ func (b *Broadcaster) Consume(audioc <-chan AudioData) {
 					close(r.audioc)
 				} else {
 					b.receivers[r.ID] = r
+          fmt.Println("Receiver added ", r.ID)
 				}
 			case r := <-b.removec:
 				delete(b.receivers, r.ID)
+        fmt.Println("Receiver removed ", r.ID)
 				if !closed {
 					close(r.audioc)
 				}
