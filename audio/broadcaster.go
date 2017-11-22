@@ -70,8 +70,8 @@ func (b *Broadcaster) Consume(audioc <-chan AudioData) {
 				if !closed {
 					close(r.audioc)
 				}
-			case data := <-audioc:
-				if data == nil {
+			case data, ok := <-audioc:
+				if !ok {
 					for _, r := range b.receivers {
 						close(r.audioc)
 					}

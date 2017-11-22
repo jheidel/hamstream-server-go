@@ -12,7 +12,7 @@ type AudioInput struct {
 	SampleRate float64
 
 	stream *portaudio.Stream
-	audioc chan []int16
+	audioc chan AudioData
 }
 
 func NewAudioInput() *AudioInput {
@@ -23,7 +23,7 @@ func NewAudioInput() *AudioInput {
 	}
 }
 
-func (ai *AudioInput) Open() (<-chan []int16, error) {
+func (ai *AudioInput) Open() (<-chan AudioData, error) {
 	err := portaudio.Initialize()
 	if err != nil {
 		return nil, err
@@ -57,10 +57,10 @@ func (ai *AudioInput) Open() (<-chan []int16, error) {
 		FramesPerBuffer: ai.ChunkSize,
 	}
 
-	ai.audioc = make(chan []int16)
+	ai.audioc = make(chan AudioData)
 
 	callback := func(in []int16) {
-		ai.audioc <- in
+		ai.audioc <- AudioData(in)
 	}
 
 	stream, err := portaudio.OpenStream(params, callback)

@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"hamstream/audio"
 	"hamstream/flasher"
+	"hamstream/hamstream"
 )
 
 func main() {
@@ -20,27 +20,18 @@ func main() {
 	flasher.Start()
 	defer flasher.Stop()
 
-	ai := audio.NewAudioInput()
-	audioc, err := ai.Open()
-	if err != nil {
-		fmt.Printf("Audio exited with error %v\n", err)
-	}
-	defer ai.Close()
-
-
-  filter := audio.NewSilenceFilter()
-
-  audioc = filter.Apply(audioc)
-
-
+	h := hamstream.NewServer("localhost:8080")
+	servec := h.Serve()
 
 	for {
 		select {
-		case a := <-audioc:
-			fmt.Printf("New audio chunk size %d: Sample %+v\n", len(a), a[:10])
-
 		case s := <-sig:
 			fmt.Printf("\nReceived signal %v. Exiting...\n", s)
+			h.Quit()
+		case err := <-servec:
+			if err != nil {
+				fmt.Println("Hamstream exited with error ", err)
+			}
 			return
 		}
 	}

@@ -26,9 +26,10 @@ func NewSilenceFilter() *SilenceFilter {
 	}
 }
 
-func getLevel(samples []int16) int16 {
+// TODO move to audio.c
+func getLevel(samples AudioData) int16 {
 	max := int16(0)
-	for _, s := range samples {
+	for _, s := range []int16(samples) {
 		// SIGH, why doesn't go have absolute value builtin...
 		if s > max {
 			max = s
@@ -40,8 +41,8 @@ func getLevel(samples []int16) int16 {
 	return max
 }
 
-func (sf *SilenceFilter) Apply(in <-chan []int16) <-chan []int16 {
-	c := make(chan []int16)
+func (sf *SilenceFilter) Apply(in <-chan AudioData) <-chan AudioData {
+	c := make(chan AudioData)
 	go func() {
 		defer close(c)
 		for samples := range in {
