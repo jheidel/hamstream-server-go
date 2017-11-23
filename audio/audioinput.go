@@ -12,7 +12,7 @@ type AudioInput struct {
 	SampleRate float64
 
 	audioc chan AudioData
-  quit chan chan error
+	quit   chan chan error
 }
 
 func NewAudioInput() *AudioInput {
@@ -20,7 +20,7 @@ func NewAudioInput() *AudioInput {
 		ChunkSize:  2048,
 		DeviceName: "USB Audio Device",
 		SampleRate: 48000,
-    quit: make(chan chan error),
+		quit:       make(chan chan error),
 	}
 }
 
@@ -58,7 +58,7 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		FramesPerBuffer: ai.ChunkSize,
 	}
 
-  buf := make([]int16, ai.ChunkSize)
+	buf := make([]int16, ai.ChunkSize)
 
 	ai.audioc = make(chan AudioData)
 
@@ -78,34 +78,34 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		return nil, err
 	}
 
-  go func() {
-    for {
-      n := make([]int16, ai.ChunkSize)
-      if err := stream.Read(); err != nil {
-        fmt.Println("Read error!", err)
-        // TODO make better, increment error counts, something nice.
-        continue
-      }
-      copy(n, buf)
-      ai.audioc <- n
+	go func() {
+		for {
+			n := make([]int16, ai.ChunkSize)
+			if err := stream.Read(); err != nil {
+				fmt.Println("Read error!", err)
+				// TODO make better, increment error counts, something nice.
+				continue
+			}
+			copy(n, buf)
+			ai.audioc <- n
 
-      select {
-        case c := <-ai.quit:
-          err := stream.Close()
-          c <- err
-          return
-        default:
-      }
-    }
-  }()
+			select {
+			case c := <-ai.quit:
+				err := stream.Close()
+				c <- err
+				return
+			default:
+			}
+		}
+	}()
 
 	return ai.audioc, nil
 }
 
 func (ai *AudioInput) Close() {
-  c := make(chan error)
-  ai.quit <- c
-  err := <-c
+	c := make(chan error)
+	ai.quit <- c
+	err := <-c
 	if err != nil {
 		fmt.Printf("Error while closing stream: %v\n", err)
 	}
