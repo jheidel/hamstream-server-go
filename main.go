@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"hamstream/flasher"
-	"hamstream/hamstream"
+	"hamstream-server-go/flasher"
+	"hamstream-server-go/server"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	flasher.Start()
 	defer flasher.Stop()
 
-	h := hamstream.NewServer(":8080")
+	h := server.New(":8080")
 	servec := h.Serve()
 
 	for {

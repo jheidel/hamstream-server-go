@@ -1,27 +1,27 @@
-package hamstream
+package server
 
 import (
 	"fmt"
-	"hamstream/audio"
+	"hamstream-server-go/audio"
 	"io"
 	"net/http"
 )
 
-type Hamstream struct {
+type Server struct {
 	Address string
 
 	// quit signals to terminate
 	quit chan bool
 }
 
-func NewServer(addr string) *Hamstream {
-	return &Hamstream{
+func New(addr string) *Server {
+	return &Server{
 		Address: addr,
 		quit:    make(chan bool),
 	}
 }
 
-func (h *Hamstream) loop() error {
+func (h *Server) loop() error {
 	ai := audio.NewAudioInput()
 	audioc, err := ai.Open()
 	if err != nil {
@@ -62,7 +62,7 @@ func (h *Hamstream) loop() error {
 	}
 }
 
-func (h *Hamstream) Serve() <-chan error {
+func (h *Server) Serve() <-chan error {
 	errc := make(chan error)
 	go func() {
 		defer close(errc)
@@ -73,7 +73,7 @@ func (h *Hamstream) Serve() <-chan error {
 	return errc
 }
 
-func (h *Hamstream) Quit() {
+func (h *Server) Quit() {
 	// Signal quit.
 	h.quit <- true
 }
