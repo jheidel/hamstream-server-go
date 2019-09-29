@@ -1,79 +1,77 @@
 package server
 
 import (
-	"fmt"
+	"context"
+	log "github.com/sirupsen/logrus"
 	"hamstream-server-go/audio"
 	"io"
 	"net/http"
+	"sync"
+	"time"
 )
 
 type Server struct {
 	Address string
-
-	// quit signals to terminate
-	quit chan bool
 }
 
 func New(addr string) *Server {
 	return &Server{
 		Address: addr,
-		quit:    make(chan bool),
 	}
 }
 
-func (h *Server) loop() error {
-	ai := audio.NewAudioInput()
-	audioc, err := ai.Open()
-	if err != nil {
-		return err
-	}
-	defer ai.Close()
-
-	bcast := audio.NewBroadcaster()
-	aserver := audio.AudioServer{
-		Broadcaster: bcast,
-	}
-
-	sfilter := audio.NewSilenceFilter()
-	audioc = sfilter.Apply(audioc)
-	bcast.Consume(audioc)
-
-	http.HandleFunc("/audio", aserver.ServeAudio)
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "OK\n")
-	})
-
-	errc := make(chan error)
+func (h *Server) Serve(ctx context.Context, wg *sync.WaitGroup, errc chan<- error) {
+	wg.Add(1)
 	go func() {
-		defer close(errc)
-		fmt.Println("HTTP server listening on", h.Address)
-		if err := http.ListenAndServe(h.Address, nil); err != nil {
-			fmt.Println("Http serve error", err)
+		defer wg.Done()
+
+		ai := audio.NewAudioInput()
+		audioc, err := ai.Open()
+		if err != nil {
+			errc <- err
+			return
+		}
+		defer ai.Close()
+
+		bcast := audio.NewBroadcaster()
+		aserver := audio.AudioServer{
+			Broadcaster: bcast,
+		}
+
+		sfilter := audio.NewSilenceFilter()
+		audioc = sfilter.Apply(audioc)
+		bcast.Consume(audioc)
+
+		srv := &http.Server{Addr: h.Address}
+
+		http.HandleFunc("/audio", aserver.ServeAudio)
+		http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			io.WriteString(w, "OK\n")
+		})
+		http.HandleFunc("/quitquitquit", func(w http.ResponseWriter, r *http.Request) {
+			io.WriteString(w, "Shutting down server in 1s\n")
+			log.Warn("Stopping server in 1s due to /quitquitquit")
+			go func() {
+				time.Sleep(time.Second)
+				srv.Shutdown(ctx)
+			}()
+		})
+
+		go func() {
+			<-ctx.Done()
+			log.Info("Killing http server due to context cancel")
+			srv.Shutdown(ctx)
+		}()
+
+		log.Infof("HTTP server listening on %q", h.Address)
+		err = srv.ListenAndServe()
+
+		if ctx.Err() != nil {
+			log.Warnf("HTTP server terminated: %v", err)
+		} else {
+			log.Errorf("Http serve error: %v", err)
+			// Report error since we're not already shutting down.
 			errc <- err
 		}
 	}()
-
-	select {
-	case err := <-errc:
-		return err
-	case <-h.quit:
-		// TODO quit the server.
-		return nil
-	}
-}
-
-func (h *Server) Serve() <-chan error {
-	errc := make(chan error)
-	go func() {
-		defer close(errc)
-		if err := h.loop(); err != nil {
-			errc <- err
-		}
-	}()
-	return errc
-}
-
-func (h *Server) Quit() {
-	// Signal quit.
-	h.quit <- true
 }

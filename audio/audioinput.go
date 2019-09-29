@@ -3,6 +3,7 @@ package audio
 import (
 	"fmt"
 	"github.com/gordonklaus/portaudio"
+	log "github.com/sirupsen/logrus"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		return nil, err
 	}
 
-	fmt.Println("AudioInput initialized: ", portaudio.VersionText())
+	log.Infof("AudioInput initialized %q", portaudio.VersionText())
 
 	devices, err := portaudio.Devices()
 	if err != nil {
@@ -46,7 +47,7 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		return nil, fmt.Errorf("Target not found in list of devices")
 	}
 
-	fmt.Printf("Device found! %+v\n", device)
+	log.Infof("Device found! %q\n", device.Name)
 
 	params := portaudio.StreamParameters{
 		Input: portaudio.StreamDeviceParameters{
@@ -78,11 +79,17 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		return nil, err
 	}
 
+	// TODO... in tight loop
+	// 1) Read from audio source
+	// 2) Do the signal processing
+	// 3) Copy to any registered output buffers.
+
 	go func() {
 		for {
+			// TODO: don't malloc here. Do something better with the chaining here.
 			n := make([]int16, ai.ChunkSize)
 			if err := stream.Read(); err != nil {
-				fmt.Println("Read error!", err)
+				log.Errorf("Portaudio read error: %v", err)
 				// TODO make better, increment error counts, something nice.
 				continue
 			}
@@ -107,7 +114,7 @@ func (ai *AudioInput) Close() {
 	ai.quit <- c
 	err := <-c
 	if err != nil {
-		fmt.Printf("Error while closing stream: %v\n", err)
+		log.Errorf("Error while closing stream: %v\n", err)
 	}
 
 	err = portaudio.Terminate()

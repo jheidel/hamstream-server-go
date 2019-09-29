@@ -1,9 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"hamstream-server-go/flasher"
@@ -11,28 +13,37 @@ import (
 )
 
 func main() {
-	fmt.Println("hello world this is hamstream and I will flash led")
+	log.Info("Start Hamstream Server")
 
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+
 	// Signal liveness by flashing an LED.
-	flasher.Start()
-	defer flasher.Stop()
+	flasher.FlashAsync(ctx, &wg)
+
+	errc := make(chan error)
 
 	h := server.New(":8080")
-	servec := h.Serve()
+	h.Serve(ctx, &wg, errc)
 
-	for {
+	for ctx.Err() == nil {
 		select {
 		case s := <-sig:
-			fmt.Printf("\nReceived signal %v. Exiting...\n", s)
-			h.Quit()
-		case err := <-servec:
+			log.Warnf("Received signal %q. Exiting...\n", s)
+			cancel()
+		case err := <-errc:
 			if err != nil {
-				fmt.Println("Hamstream exited with error ", err)
+				log.Errorf("Runtime error: %v", err)
+				cancel()
 			}
-			return
 		}
 	}
+
+	log.Info("Waiting for all contexts to exit")
+	wg.Wait()
+	log.Info("Hamstream Exit")
 }
