@@ -1,19 +1,19 @@
 package audio
 
 import (
+	"context"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
 	log "github.com/sirupsen/logrus"
 	"strings"
+	"sync"
 )
 
 type AudioInput struct {
-	ChunkSize  int
-	DeviceName string
-	SampleRate float64
-
-	audioc chan AudioData
-	quit   chan chan error
+	ChunkSize   int
+	DeviceName  string
+	SampleRate  float64
+	Broadcaster *Broadcaster
 }
 
 func NewAudioInput() *AudioInput {
@@ -21,21 +21,20 @@ func NewAudioInput() *AudioInput {
 		ChunkSize:  2048,
 		DeviceName: "USB Audio Device",
 		SampleRate: 48000,
-		quit:       make(chan chan error),
 	}
 }
 
-func (ai *AudioInput) Open() (<-chan AudioData, error) {
+func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) error {
 	err := portaudio.Initialize()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	log.Infof("AudioInput initialized %q", portaudio.VersionText())
 
 	devices, err := portaudio.Devices()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var device *portaudio.DeviceInfo
 	for _, d := range devices {
@@ -44,7 +43,7 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 		}
 	}
 	if device == nil {
-		return nil, fmt.Errorf("Target not found in list of devices")
+		return fmt.Errorf("Target not found in list of devices")
 	}
 
 	log.Infof("Device found! %q\n", device.Name)
@@ -61,65 +60,46 @@ func (ai *AudioInput) Open() (<-chan AudioData, error) {
 
 	buf := make([]int16, ai.ChunkSize)
 
-	ai.audioc = make(chan AudioData)
-
-	//callback := func(in []int16) {
-	//	ai.audioc <- AudioData(in)
-	//}
-
-	//stream, err := portaudio.OpenStream(params, callback)
-
 	stream, err := portaudio.OpenStream(params, buf)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if err := stream.Start(); err != nil {
+		return err
 	}
 
-	err = stream.Start()
-	if err != nil {
-		return nil, err
-	}
+	sf := NewSilenceFilter()
 
-	// TODO... in tight loop
-	// 1) Read from audio source
-	// 2) Do the signal processing
-	// 3) Copy to any registered output buffers.
-
+	wg.Add(1)
 	go func() {
-		for {
-			// TODO: don't malloc here. Do something better with the chaining here.
-			n := make([]int16, ai.ChunkSize)
+		defer wg.Done()
+
+		for ctx.Err() == nil {
 			if err := stream.Read(); err != nil {
 				log.Errorf("Portaudio read error: %v", err)
 				// TODO make better, increment error counts, something nice.
 				continue
 			}
-			copy(n, buf)
-			ai.audioc <- n
 
-			select {
-			case c := <-ai.quit:
-				err := stream.Close()
-				c <- err
-				return
-			default:
+			samples := buf[:]
+
+			sf.Process(samples)
+			if sf.IsSilent() {
+				continue
 			}
-		}
-	}()
 
-	return ai.audioc, nil
+			ai.Broadcaster.Broadcast(samples)
+		}
+
+		ai.Close()
+	}()
+	return nil
 }
 
 func (ai *AudioInput) Close() {
-	c := make(chan error)
-	ai.quit <- c
-	err := <-c
-	if err != nil {
-		log.Errorf("Error while closing stream: %v\n", err)
+	if err := portaudio.Terminate(); err != nil {
+		log.Errorf("Portaudio terminate failed: %v", err)
+		return
 	}
-
-	err = portaudio.Terminate()
-	if err != nil {
-		fmt.Printf("Terminate failed: %v\n", err)
-	}
-	fmt.Println("Portaudio terminated")
+	log.Infof("Portaudio terminated")
 }

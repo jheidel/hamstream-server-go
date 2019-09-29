@@ -11,13 +11,8 @@ import (
 )
 
 type Server struct {
-	Address string
-}
-
-func New(addr string) *Server {
-	return &Server{
-		Address: addr,
-	}
+	Address     string
+	AudioServer *audio.AudioServer
 }
 
 func (h *Server) Serve(ctx context.Context, wg *sync.WaitGroup, errc chan<- error) {
@@ -25,26 +20,9 @@ func (h *Server) Serve(ctx context.Context, wg *sync.WaitGroup, errc chan<- erro
 	go func() {
 		defer wg.Done()
 
-		ai := audio.NewAudioInput()
-		audioc, err := ai.Open()
-		if err != nil {
-			errc <- err
-			return
-		}
-		defer ai.Close()
-
-		bcast := audio.NewBroadcaster()
-		aserver := audio.AudioServer{
-			Broadcaster: bcast,
-		}
-
-		sfilter := audio.NewSilenceFilter()
-		audioc = sfilter.Apply(audioc)
-		bcast.Consume(audioc)
-
 		srv := &http.Server{Addr: h.Address}
 
-		http.HandleFunc("/audio", aserver.ServeAudio)
+		http.HandleFunc("/audio", h.AudioServer.ServeAudio)
 		http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, "OK\n")
 		})
@@ -64,7 +42,7 @@ func (h *Server) Serve(ctx context.Context, wg *sync.WaitGroup, errc chan<- erro
 		}()
 
 		log.Infof("HTTP server listening on %q", h.Address)
-		err = srv.ListenAndServe()
+		err := srv.ListenAndServe()
 
 		if ctx.Err() != nil {
 			log.Warnf("HTTP server terminated: %v", err)

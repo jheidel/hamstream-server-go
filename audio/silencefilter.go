@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// TODO: make this a generic audio stats module.
+
 // SilenceFilter blocks an audio stream on input level.
 type SilenceFilter struct {
 	// LevelThresh defines the value at which samples are consisdered silent.
@@ -26,43 +28,20 @@ func NewSilenceFilter() *SilenceFilter {
 	}
 }
 
-// TODO move to audio.c
-func getLevel(samples AudioData) int16 {
-	max := int16(0)
-	for _, s := range []int16(samples) {
-		// SIGH, why doesn't go have absolute value builtin...
-		if s > max {
-			max = s
-		}
-		if -1*s > max {
-			max = -1 * s
-		}
+func (sf *SilenceFilter) Process(sample AudioData) {
+	level := sample.GetLevel()
+	now := time.Now()
+	if level > sf.LevelThresh {
+		sf.lastSound = now
 	}
-	return max
-}
-
-func (sf *SilenceFilter) Apply(in <-chan AudioData) <-chan AudioData {
-	c := make(chan AudioData)
-	go func() {
-		defer close(c)
-		for samples := range in {
-			level := getLevel(samples)
-			now := time.Now()
-			if level > sf.LevelThresh {
-				sf.lastSound = now
-			}
-			silent := true
-			if now.Sub(sf.lastSound) < sf.DurationThresh {
-				c <- samples
-				silent = false
-			}
-			sf.mutex.Lock()
-			sf.level = level
-			sf.silent = silent
-			sf.mutex.Unlock()
-		}
-	}()
-	return c
+	silent := true
+	if now.Sub(sf.lastSound) < sf.DurationThresh {
+		silent = false
+	}
+	sf.mutex.Lock()
+	sf.level = level
+	sf.silent = silent
+	sf.mutex.Unlock()
 }
 
 func (sf *SilenceFilter) GetLevel() int16 {

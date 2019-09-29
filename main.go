@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 
+	"hamstream-server-go/audio"
 	"hamstream-server-go/flasher"
 	"hamstream-server-go/server"
 )
@@ -21,13 +22,27 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
+	errc := make(chan error)
 
 	// Signal liveness by flashing an LED.
 	flasher.FlashAsync(ctx, &wg)
 
-	errc := make(chan error)
+	bcast := audio.NewBroadcaster()
 
-	h := server.New(":8080")
+	ai := audio.NewAudioInput()
+	ai.Broadcaster = bcast
+	if err := ai.OpenAndServe(ctx, &wg); err != nil {
+		log.Fatalf("Failed to open audio source: %v", err)
+	}
+
+	aserver := &audio.AudioServer{
+		Broadcaster: bcast,
+	}
+
+	h := &server.Server{
+		Address:     ":8080",
+		AudioServer: aserver,
+	}
 	h.Serve(ctx, &wg, errc)
 
 	for ctx.Err() == nil {
