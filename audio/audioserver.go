@@ -1,21 +1,25 @@
 package audio
 
 import (
+	"context"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
-)
-
-var (
-	upgrader = websocket.Upgrader{} // use default options
+	"time"
 )
 
 type AudioServer struct {
 	Broadcaster *Broadcaster
 }
 
-func (a *AudioServer) ServeAudio(w http.ResponseWriter, r *http.Request) {
+func (a *AudioServer) Serve(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
 	log.Infof("Client %q connected with header %q", r.RemoteAddr, r.Header)
+	defer func() {
+		log.Infof("Client %q disconnected", r.RemoteAddr)
+	}()
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -27,7 +31,9 @@ func (a *AudioServer) ServeAudio(w http.ResponseWriter, r *http.Request) {
 	ar := a.Broadcaster.NewReceiver()
 	defer ar.Close()
 
-	audioc := ar.GetAudioStream()
+	pt := time.NewTicker(PingPeriod)
+
+	audioc := ar.GetAudioStream(ctx)
 	for {
 		select {
 		case data, ok := <-audioc:
@@ -37,13 +43,18 @@ func (a *AudioServer) ServeAudio(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := c.WriteMessage(websocket.BinaryMessage, data); err != nil {
-				log.Warnf("Client %q disconnect, write failure %v", r.RemoteAddr, err)
+				log.Warnf("Write failure %v", err)
 				return
 			}
 
-		case <-r.Context().Done():
-			log.Infof("Client %q disconnected", r.RemoteAddr)
+		case <-ctx.Done():
 			return
+
+		case now := <-pt.C:
+			if err := c.WriteControl(websocket.PingMessage, []byte{}, now.Add(PingDeadline)); err != nil {
+				log.Errorf("Failed to send ping: %v", err)
+				return
+			}
 		}
 	}
 }

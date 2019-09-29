@@ -17,7 +17,7 @@ type SilenceFilter struct {
 	lastSound time.Time
 	level     int16
 	silent    bool
-	mutex     sync.Mutex
+	mutex     sync.RWMutex
 }
 
 func NewSilenceFilter() *SilenceFilter {
@@ -45,13 +45,13 @@ func (sf *SilenceFilter) Process(sample AudioData) {
 }
 
 func (sf *SilenceFilter) GetLevel() int16 {
-	sf.mutex.Lock()
-	defer sf.mutex.Unlock()
+	sf.mutex.RLock()
+	defer sf.mutex.RUnlock()
 	return sf.level
 }
 
 func (sf *SilenceFilter) IsSilent() bool {
-	sf.mutex.Lock()
-	defer sf.mutex.Unlock()
+	sf.mutex.RLock()
+	defer sf.mutex.RUnlock()
 	return sf.silent
 }

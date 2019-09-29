@@ -14,6 +14,16 @@ type AudioInput struct {
 	DeviceName  string
 	SampleRate  float64
 	Broadcaster *Broadcaster
+	Filter      *SilenceFilter
+
+	errors int
+	mu     sync.RWMutex
+}
+
+func (ai *AudioInput) GetErrors() int {
+	ai.mu.RLock()
+	defer ai.mu.RUnlock()
+	return ai.errors
 }
 
 func NewAudioInput() *AudioInput {
@@ -68,8 +78,6 @@ func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) erro
 		return err
 	}
 
-	sf := NewSilenceFilter()
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -77,14 +85,16 @@ func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) erro
 		for ctx.Err() == nil {
 			if err := stream.Read(); err != nil {
 				log.Errorf("Portaudio read error: %v", err)
-				// TODO make better, increment error counts, something nice.
+				ai.mu.Lock()
+				ai.errors += 1
+				ai.mu.Unlock()
 				continue
 			}
 
 			samples := buf[:]
 
-			sf.Process(samples)
-			if sf.IsSilent() {
+			ai.Filter.Process(samples)
+			if ai.Filter.IsSilent() {
 				continue
 			}
 

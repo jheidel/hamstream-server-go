@@ -13,6 +13,7 @@ import (
 type Server struct {
 	Address     string
 	AudioServer *audio.AudioServer
+	StatsServer *audio.StatsServer
 }
 
 func (h *Server) Serve(ctx context.Context, wg *sync.WaitGroup, errc chan<- error) {
@@ -22,7 +23,8 @@ func (h *Server) Serve(ctx context.Context, wg *sync.WaitGroup, errc chan<- erro
 
 		srv := &http.Server{Addr: h.Address}
 
-		http.HandleFunc("/audio", h.AudioServer.ServeAudio)
+		http.HandleFunc("/audio", h.AudioServer.Serve)
+		http.HandleFunc("/stats", h.StatsServer.Serve)
 		http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, "OK\n")
 		})

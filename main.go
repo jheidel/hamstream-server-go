@@ -28,9 +28,11 @@ func main() {
 	flasher.FlashAsync(ctx, &wg)
 
 	bcast := audio.NewBroadcaster()
+	sf := audio.NewSilenceFilter()
 
 	ai := audio.NewAudioInput()
 	ai.Broadcaster = bcast
+	ai.Filter = sf
 	if err := ai.OpenAndServe(ctx, &wg); err != nil {
 		log.Fatalf("Failed to open audio source: %v", err)
 	}
@@ -39,9 +41,16 @@ func main() {
 		Broadcaster: bcast,
 	}
 
+	sserver := &audio.StatsServer{
+		Broadcaster: bcast,
+		Filter:      sf,
+		Input:       ai,
+	}
+
 	h := &server.Server{
 		Address:     ":8080",
 		AudioServer: aserver,
+		StatsServer: sserver,
 	}
 	h.Serve(ctx, &wg, errc)
 

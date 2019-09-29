@@ -3,6 +3,7 @@ package audio
 import (
 	"bytes"
 	"container/ring"
+	"context"
 	"encoding/binary"
 	log "github.com/sirupsen/logrus"
 	"sync"
@@ -10,7 +11,7 @@ import (
 
 const (
 	// TODO compute these based on the audio sample rates.
-	RingCount = 256  // About 10s of audio
+	RingCount = 128  // About 5s of audio
 	BufSize   = 4096 // based on chunk size of 2048 of int16s
 )
 
@@ -35,8 +36,9 @@ type Receiver struct {
 	head *ring.Ring
 	tail *ring.Ring
 
-	mu   sync.Mutex
-	cond *sync.Cond
+	closed bool
+	mu     sync.Mutex
+	cond   *sync.Cond
 }
 
 func (r *Receiver) Broadcast(data []byte) {
@@ -91,6 +93,12 @@ func (b *Broadcaster) Broadcast(samples AudioData) {
 	}
 }
 
+func (b *Broadcaster) ReceiverCount() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.receivers)
+}
+
 func (b *Broadcaster) NewReceiver() *Receiver {
 	// Initialize the ring buffer.
 	rbuf := ring.New(RingCount)
@@ -126,18 +134,27 @@ func (r *Receiver) Close() {
 	r.parent.mu.Unlock()
 }
 
-func (r *Receiver) GetAudioStream() <-chan []byte {
-	// TODO closed condition
+func (r *Receiver) GetAudioStream(ctx context.Context) <-chan []byte {
 	c := make(chan []byte)
+	go func() {
+		<-ctx.Done()
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.closed = true
+		r.cond.Signal()
+	}()
 	go func() {
 		defer close(c)
 		for {
 			// TODO what happens when we run into our tail....
 
 			r.mu.Lock()
-			for r.head == r.tail {
+			for r.head == r.tail && !r.closed {
 				// Wait for new data.
 				r.cond.Wait()
+			}
+			if r.closed {
+				return
 			}
 			buf := r.tail.Value.(*bytes.Buffer)
 			r.tail = r.tail.Next()
