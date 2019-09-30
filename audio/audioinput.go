@@ -15,6 +15,7 @@ type AudioInput struct {
 	SampleRate  float64
 	Broadcaster *Broadcaster
 	Filter      *SilenceFilter
+	Wav         *WavWriter
 
 	errors int
 	mu     sync.RWMutex
@@ -28,7 +29,7 @@ func (ai *AudioInput) GetErrors() int {
 
 func NewAudioInput() *AudioInput {
 	return &AudioInput{
-		ChunkSize:  2048,
+		ChunkSize:  ChunkSize,
 		DeviceName: "USB Audio Device",
 		SampleRate: 48000,
 	}
@@ -96,6 +97,10 @@ func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) erro
 			ai.Filter.Process(samples)
 			if ai.Filter.IsSilent() {
 				continue
+			}
+
+			if ai.Wav != nil {
+				ai.Wav.Write(samples)
 			}
 
 			ai.Broadcaster.Broadcast(samples)
