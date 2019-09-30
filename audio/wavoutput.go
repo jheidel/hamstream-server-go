@@ -2,21 +2,51 @@ package audio
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path"
 	"sync"
+	"time"
 
 	"container/ring"
 	goaudio "github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	strftime "github.com/jehiah/go-strftime"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	WavRingSize = 256
+
+	// Generate a section header if this much time elapsed since the last sample.
+	SectionThresh = 30 * time.Second
 )
 
+func genFileName() string {
+	return fmt.Sprintf("%s.wav", strftime.Format("%Y%m%d-%H%M%S", time.Now()))
+}
+
+func genFileSpeech() string {
+	return fmt.Sprintf("Radio stream recording from %s.", strftime.Format("%B %-d, %Y", time.Now()))
+}
+
+func genSectionSpeech() string {
+	return strftime.Format("%-H %M", time.Now())
+}
+
+func speakToFile(txt string, we *wav.Encoder) error {
+	d, err := Speak(txt)
+	if err != nil {
+		return err
+	}
+	if err := we.Write(d); err != nil {
+		return err
+	}
+	return nil
+}
+
 type WavWriter struct {
-	Path string
+	PathBase string
 
 	buf  *ring.Ring
 	bufc chan []int
@@ -30,8 +60,10 @@ func (w *WavWriter) OpenAndHost(ctx context.Context, wg *sync.WaitGroup) error {
 		w.buf = w.buf.Next()
 	}
 
-	// TODO dynamic filename from date.
-	fn := w.Path
+	if err := os.MkdirAll(w.PathBase, 0660); err != nil {
+		return fmt.Errorf("Failed to create recording directory: %v", err)
+	}
+	fn := path.Join(w.PathBase, genFileName())
 	wf, err := os.Create(fn)
 	if err != nil {
 		return err
@@ -40,13 +72,8 @@ func (w *WavWriter) OpenAndHost(ctx context.Context, wg *sync.WaitGroup) error {
 	we := wav.NewEncoder(wf, 48000, 16, 1, 1)
 	log.Infof("Opened WAV %q", fn)
 
-	// TODO dynamic
-	header, err := Speak("TEST TEST TEST this is a radio stream recording TEST TEST TEST")
-	if err != nil {
-		return err
-	}
-	if err := we.Write(header); err != nil {
-		return err
+	if err := speakToFile(genFileSpeech(), we); err != nil {
+		return fmt.Errorf("Failed to generate file speech header: %v", err)
 	}
 
 	wg.Add(1)
@@ -62,10 +89,21 @@ func (w *WavWriter) OpenAndHost(ctx context.Context, wg *sync.WaitGroup) error {
 			}
 		}()
 
+		var lastSpeech time.Time
+
 		for ctx.Err() == nil {
 			select {
 			case buf := <-w.bufc:
-				// New sample!
+				// Write section header if enough time elapsed.
+				now := time.Now()
+				if now.Sub(lastSpeech) > SectionThresh {
+					if err := speakToFile(genSectionSpeech(), we); err != nil {
+						log.Errorf("Failed to generate section speech: %v", err)
+					}
+				}
+				lastSpeech = now
+
+				// Write new sample!
 				abuf := &goaudio.IntBuffer{
 					Format: &goaudio.Format{
 						NumChannels: 1,
