@@ -2,6 +2,10 @@ package audio
 
 type AudioData []int16
 
+const (
+	ChunkSize = 2048
+)
+
 // TODO move to audio.c
 func (samples AudioData) GetLevel() int16 {
 	max := int16(0)

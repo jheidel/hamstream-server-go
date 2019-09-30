@@ -30,9 +30,18 @@ func main() {
 	bcast := audio.NewBroadcaster()
 	sf := audio.NewSilenceFilter()
 
+	wr := &audio.WavWriter{
+		Path: "/tmp/out.wav",
+	}
+
+	if err := wr.OpenAndHost(ctx, &wg); err != nil {
+		log.Fatalf("Failed to open output WAV: %v", err)
+	}
+
 	ai := audio.NewAudioInput()
 	ai.Broadcaster = bcast
 	ai.Filter = sf
+	ai.Wav = wr
 	if err := ai.OpenAndServe(ctx, &wg); err != nil {
 		log.Fatalf("Failed to open audio source: %v", err)
 	}
