@@ -27,11 +27,11 @@ func genFileName() string {
 }
 
 func genFileSpeech() string {
-	return fmt.Sprintf("Radio stream recording from %s.", strftime.Format("%B %-d, %Y", time.Now()))
+	return fmt.Sprintf("Radio stream recording from %s.", strftime.Format("%B %d, %Y", time.Now()))
 }
 
 func genSectionSpeech() string {
-	return strftime.Format("%-H %M", time.Now())
+	return strftime.Format("%H %M", time.Now())
 }
 
 func speakToFile(txt string, we *wav.Encoder) error {
@@ -60,7 +60,7 @@ func (w *WavWriter) OpenAndHost(ctx context.Context, wg *sync.WaitGroup) error {
 		w.buf = w.buf.Next()
 	}
 
-	if err := os.MkdirAll(w.PathBase, 0660); err != nil {
+	if err := os.MkdirAll(w.PathBase, 0770); err != nil {
 		return fmt.Errorf("Failed to create recording directory: %v", err)
 	}
 	fn := path.Join(w.PathBase, genFileName())
