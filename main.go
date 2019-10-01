@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
@@ -13,7 +15,13 @@ import (
 	"hamstream-server-go/server"
 )
 
+var (
+	path = flag.String("path", "/home/pi/recordings/", "Path for output files")
+	port = flag.Int("port", 8080, "Port to host web server")
+)
+
 func main() {
+	flag.Parse()
 	log.Info("Start Hamstream Server")
 
 	sig := make(chan os.Signal)
@@ -31,17 +39,18 @@ func main() {
 	sf := audio.NewSilenceFilter()
 
 	wr := &audio.WavWriter{
-		Path: "/tmp/out.wav",
+		PathBase: *path,
 	}
 
 	if err := wr.OpenAndHost(ctx, &wg); err != nil {
 		log.Fatalf("Failed to open output WAV: %v", err)
 	}
 
-	ai := audio.NewAudioInput()
-	ai.Broadcaster = bcast
-	ai.Filter = sf
-	ai.Wav = wr
+	ai := &audio.AudioInput{
+		Broadcaster: bcast,
+		Filter:      sf,
+		Wav:         wr,
+	}
 	if err := ai.OpenAndServe(ctx, &wg); err != nil {
 		log.Fatalf("Failed to open audio source: %v", err)
 	}
@@ -57,7 +66,7 @@ func main() {
 	}
 
 	h := &server.Server{
-		Address:     ":8080",
+		Address:     fmt.Sprintf(":%d", *port),
 		AudioServer: aserver,
 		StatsServer: sserver,
 	}

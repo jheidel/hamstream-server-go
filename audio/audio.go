@@ -3,7 +3,9 @@ package audio
 type AudioData []int16
 
 const (
-	ChunkSize = 2048
+	ChunkSize  = 2048
+	DeviceName = "USB Audio Device"
+	SampleRate = 48000
 )
 
 // TODO move to audio.c

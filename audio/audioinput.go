@@ -10,9 +10,6 @@ import (
 )
 
 type AudioInput struct {
-	ChunkSize   int
-	DeviceName  string
-	SampleRate  float64
 	Broadcaster *Broadcaster
 	Filter      *SilenceFilter
 	Wav         *WavWriter
@@ -25,14 +22,6 @@ func (ai *AudioInput) GetErrors() int {
 	ai.mu.RLock()
 	defer ai.mu.RUnlock()
 	return ai.errors
-}
-
-func NewAudioInput() *AudioInput {
-	return &AudioInput{
-		ChunkSize:  ChunkSize,
-		DeviceName: "USB Audio Device",
-		SampleRate: 48000,
-	}
 }
 
 func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) error {
@@ -49,7 +38,7 @@ func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) erro
 	}
 	var device *portaudio.DeviceInfo
 	for _, d := range devices {
-		if strings.Contains(d.Name, ai.DeviceName) {
+		if strings.Contains(d.Name, DeviceName) {
 			device = d
 		}
 	}
@@ -65,11 +54,11 @@ func (ai *AudioInput) OpenAndServe(ctx context.Context, wg *sync.WaitGroup) erro
 			Channels: 1,
 			Latency:  device.DefaultLowInputLatency,
 		},
-		SampleRate:      ai.SampleRate,
-		FramesPerBuffer: ai.ChunkSize,
+		SampleRate:      SampleRate,
+		FramesPerBuffer: ChunkSize,
 	}
 
-	buf := make([]int16, ai.ChunkSize)
+	buf := make([]int16, ChunkSize)
 
 	stream, err := portaudio.OpenStream(params, buf)
 	if err != nil {
